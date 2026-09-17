@@ -55,6 +55,6 @@ profile 目录包含一个 `package.json`，其中记录树外插件依赖，以
 
 生产运行需要已构建的包与前端产物。请在仓库根目录单独运行 `pnpm run build`，然后使用 `pnpm dsh <args...>` 运行 TypeScript 入口并转发所有参数；模块解析约定以[源码执行参考](reference/README.zh.md#source-execution)为准。
 
-`@deepseek-ai/dsh/profile-boot` 导出向 Desktop Host 提供共享 profile 生命周期。已解析的应用 profile 为运行时包解析指定自己的安装锚点，同时沿用 Harness home patch、代理环境、遥测开关、patch 热重载和有界关闭。
+`@deepseek-ai/dsh/profile-boot` 导出向 Desktop Host 提供共享 profile 生命周期。已解析的应用 profile 提供自己的安装锚点和 profile 本地 module fallback，同时沿用 Harness home patch、代理环境、遥测开关、patch 热重载和有界关闭。
 
 [Web 失败矩阵](tests/profiles/web/tests/web-failure-matrix.expected.e2e.ts)在 `test:expected` 中通过构建后的 CLI 验证启动失败与启用 `awaitWriteFinish` 的原生配置 HMR。它不调用模型 API，而是检查经过认证的 HTTP 响应、诊断、恢复、进程退出与 dispose；[启动验收测试](tests/profiles/web/tests/web-best-effort-startup.expected.e2e.ts)还覆盖随附 Web 的必需依赖与端口冲突。

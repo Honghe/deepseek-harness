@@ -238,7 +238,11 @@ export interface RunProfileOptions {
   args: readonly string[]
   /** Application-owned package runtime, scoped to plugin package operations. */
   packageManager?: ProfileContext['packageManager']
-  /** Module fallback backend; defaults to runtime. Plain Node callers may override it; pkg executables always use runtime. */
+  /**
+   * Module fallback backend; defaults to link, the only mode whose resolution matches a source
+   * launch's tsconfig-paths universe. Plain Node callers with a built, self-consistent
+   * installation may opt into runtime; pkg executables always use runtime.
+   */
   resolutionMode?: ProfileResolutionMode
 }
 
@@ -260,7 +264,16 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   )
 
   const packaged = (process as NodeJS.Process & { pkg?: unknown }).pkg !== undefined
-  const resolutionMode = packaged ? 'runtime' : options.resolutionMode ?? 'runtime'
+  // A source launch (`pnpm dsh …`: `node --import tsx/esm apps/cli/src/bin.ts`) resolves its own
+  // module universe from `packages/*/src` through the tsconfig `paths` map. Runtime mode would
+  // enforce the installation's disk generation over profile plugin imports, loading a second copy
+  // of every workspace package (`src` for the launcher, `lib` for the profile tree) into one
+  // process: symbol-keyed service contracts such as `TOOL_RUNTIME_SCHEDULER` then identify across
+  // copies, and the first tool call dies reading `prepare` off the other copy's scheduler. Link
+  // mode keeps exactly one universe — plugin specifiers resolve through the same process-wide
+  // paths map — so it stays the default for every non-packaged launch; runtime remains for pkg
+  // executables (forced above) and explicit plain-Node opt-in.
+  const resolutionMode = packaged ? 'runtime' : options.resolutionMode ?? 'link'
   const app: { current?: Context } = {}
   let disposal: Promise<void> | undefined
   const dispose = (): Promise<void> => disposal ??= (async () => {

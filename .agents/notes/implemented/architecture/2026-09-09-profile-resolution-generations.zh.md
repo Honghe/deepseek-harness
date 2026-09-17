@@ -12,17 +12,17 @@ profile 从自己的包项目加载插件配置项，而 Harness 包和所选 bu
 
 ## Decision
 
-profile 启动从磁盘 module fallback 使用的同一套依赖遍历生成一个不可变 `ResolutionGeneration`。launcher 默认使用 runtime 模式，把 generation 安装到 Node 的 ESM 与 CommonJS 解析器，不物化 fallback 链接。普通 Node 调用方和测试可以显式选择 link 模式以物化 generation，或选择 dual 模式以物化并校验它。`PluginPackages.replace()` 通过一次引用替换发布完整的新增型后继 generation。
+profile 启动从磁盘 module fallback 使用的同一套依赖遍历生成一个不可变 `ResolutionGeneration`。launcher 默认使用 link 模式，保留既有的物化查找行为。内部调用方和测试可以选择 runtime 模式（把 generation 安装到 Node 的 ESM 与 CommonJS 解析器），或选择 dual 模式（物化并校验同一个 generation）。`PluginPackages.replace()` 通过一次引用替换发布完整的新增型后继 generation。
 
 ### 唯一选包算法
 
-包遍历继续放在 `@deepseek-ai/dsh-app-boot` 的 profile 加载代码旁。磁盘 materializer 和运行时解析器消费同一个纯计划；两者都不持有另一份优先级算法。普通 Node 调用方可以选择 link、dual 或 runtime 模式，省略模式时使用 runtime。打包可执行文件与 Electron Host 会选择 runtime，因为其依赖树可能位于虚拟文件系统；dual 保留为内部对比路径。
+包遍历继续放在 `@deepseek-ai/dsh-app-boot` 的 profile 加载代码旁。磁盘 materializer 和运行时解析器消费同一个纯计划；两者都不持有另一份优先级算法。普通 Node 调用方可以选择 link、dual 或 runtime 模式，省略模式时使用 link：源码启动（`node --import tsx/esm apps/cli/src/bin.ts`）通过 tsconfig `paths` 映射从工作区 `src` 树解析自身的模块宇宙，若在 profile 插件导入上强制安装目录的磁盘 generation，会把每个工作区包的第二份 `lib` 副本加载进同一进程——符号键控的服务契约随后无法跨副本识别，第一次工具调用就会在读取另一个副本调度器的 `prepare` 时失败。打包可执行文件与 Electron Host 的进程解析的就是那一个磁盘宇宙，因此选择 runtime；dual 保留为内部对比路径。
 
 安装 manifest 是第一个根。它按 BFS 依次遍历 `dependencies` 和 `peerDependencies`，每条边从声明它的 manifest 解析，同名包由第一次找到的已安装包占有。所选 bundle 随后按 profile 顺序逐根遍历；每个较早根的完整依赖图优先于所有较晚根。安装闭包中的名称被保留，bundle 包根本身不成为插件 fallback。与旧行为相同，已声明但未安装的包会被跳过。
 
 profile 本地和插件私有 `node_modules` 不进入 fallback entries，由 Node 在虚拟 fallback 位置之前选择。generation 只记录已安装的 profile 直接包名用于 native 快速分流；每个 fallback 记录包名、版本、旧规则选中的查找目录、声明该边的 manifest 锚点和作用域，足以从选定包重新进入 Node 原生解析并验证换代保持既有映射。
 
-旧 `healProfilesModuleFallback()` 保留为相同纯计算结果的磁盘 materializer，便于直接比较并避免重写旧规则。具名 profile 启动只在显式 link 或 dual 模式下调用它。runtime 模式只计算 generation 而不物化，dual 模式会物化并安装该 generation 进行比较。
+旧 `healProfilesModuleFallback()` 保留为相同纯计算结果的磁盘 materializer，便于直接比较并避免重写旧规则。launcher 默认调用它。runtime 模式只计算 generation 而不物化，dual 模式会物化并安装该 generation 进行比较。
 
 ### 不可变 generation
 
@@ -74,7 +74,7 @@ runtime-only 启动流程不创建、更新或退休 symlink 和代理包。reso
 
 link、dual 与 runtime 模式使用同一种 generation schema 和依赖选择策略。link 模式持久化计算结果，runtime 模式只在进程内安装，dual 模式要求 Node 的磁盘结果与 generation 路由一致。
 
-普通 Node 调用方省略 `resolutionMode` 时，`dsh` launcher 选择 runtime 模式。pkg 可执行文件始终选择 runtime，Electron Host 在开发与打包构建中也会在挂载任何 profile 条目前显式选择 runtime。普通 Node 测试与底层嵌入方可以显式选择 link、dual 或 runtime。
+普通 Node 调用方省略 `resolutionMode` 时，`dsh` launcher 选择 link 模式，因此既有 npm 安装的 profile 启动保持其文件系统行为，源码启动也保持单一模块宇宙。pkg 可执行文件始终选择 runtime，Electron Host 在挂载任何 profile 条目前安装其 runtime generation。测试与底层嵌入方仍可显式选择 runtime 或 dual；`apps/cli/tests/source-launch-tool-turn.e2e.ts` 固定了模块宇宙分裂会破坏的源码向量工具分发。
 
 runtime 模式要求受支持的 Node Internal loader 接口，并且不会创建、更新或退休 fallback 链接。dual 模式保留链接写入，并在 Node 的磁盘结果与 generation 不同时失败。可写 profile 状态和包管理器事务不属于 resolver。
 
@@ -115,4 +115,4 @@ generation 构造发生在启动或显式更新阶段，不属于单次 resolve�
 
 ## Consequences
 
-runtime 启动避免磁盘修改和代理 manifest，同时保留既有选包算法。代价是持续维护 Node Internal 兼容测试，并在每个自有 Worker 中最早执行自包含 bootstrap。runtime 是普通 Node launcher 的默认值，link 与 dual 保留为显式对比选项；pkg 与 Electron 载体强制使用 runtime，解析器不退休旧链接。在产品拥有模块缓存失效和 Worker 重启前，generation 替换只能新增映射。
+runtime 启动避免磁盘修改和代理 manifest，同时保留既有选包算法。代价是持续维护 Node Internal 兼容测试，并在每个自有 Worker 中最早执行自包含 bootstrap。link 仍是普通 Node launcher 的默认值——唯一解析结果与源码启动 tsconfig paths 宇宙一致的模式；dual 保留迁移对比路径，pkg 与 Electron 载体强制使用 runtime，不退休旧链接。在产品拥有模块缓存失效和 Worker 重启前，generation 替换只能新增映射。

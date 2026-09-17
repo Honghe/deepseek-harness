@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-09-profile-resolution-generations.md
-2026-09-09-profile-resolution-generations.md: ad6f05ba88b25ea52da97834cf4638c8feb961ba
-2026-09-09-profile-resolution-generations.zh.md: ffa9abc5a6a04bc9553878946fa3fb422328312c
+2026-09-09-profile-resolution-generations.md: a226b42289360e95c58201658f7517f49b41bfe7
+2026-09-09-profile-resolution-generations.zh.md: 7895421c3258e3e937df59fa010dd81d92401509
